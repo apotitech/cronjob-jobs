@@ -1,0 +1,71 @@
+name: Run urlwatch
+on:
+  schedule:
+    - cron: '12,27,42,57 * * * *'
+  # push:
+  #   branches:
+  #     - main
+
+jobs:
+  urlwatch:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Dump event data
+        env:
+          GITHUB_WEBHOOK: ${{ toJSON(github.event) }}
+        run: |
+          #!/bin/bash
+          echo $GITHUB_WEBHOOK
+
+      - name: Checkout configuration
+        uses: actions/checkout@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
+
+      - name: Cache python dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: urlwatch-pip
+
+      - name: Install urlwatch
+        run: |
+          pip install -U pip wheel
+          pip install -U urlwatch
+
+      - name: Add Mailgun API key
+        run: sed -i "s/MAILGUN_API_KEY/${MAILGUN_API_KEY}/" urlwatch/urlwatch.yml
+        env:
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+
+      - name: Restore cache database
+        run: |
+          #!/bin/bash
+          mkdir -p ~/.cache/urlwatch
+          git fetch --all
+          if git checkout origin/cache-db cache.db.gz; then
+            mv cache.db.gz ~/.cache/urlwatch
+            gunzip -v ~/.cache/urlwatch/cache.db.gz
+          else
+            sqlite3 ~/.cache/urlwatch/cache.db <<< ".tables"
+          fi
+
+      - name: Run urlwatch
+        run: urlwatch --config urlwatch/urlwatch.yml --urls urlwatch/urls.yml
+
+      - name: Compress and move urlwatch cache db
+        run: |
+          mkdir -vp database/
+          gzip -vc ~/.cache/urlwatch/cache.db > database/cache.db.gz
+
+      - name: Store cache database
+        uses: s0/git-publish-subdir-action@develop
+        env:
+          REPO: self
+          BRANCH: cache-db
+          FOLDER: database
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SQUASH_HISTORY: true

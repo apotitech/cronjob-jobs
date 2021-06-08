@@ -1,0 +1,37 @@
+name: Run thetastreak
+on:
+  schedule:
+    - cron: '5 */6 * * *'
+  # push:
+  #   branches:
+  #     - main
+
+jobs:
+  thetastreak:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout configuration
+        uses: actions/checkout@v2
+
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+
+      - uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install requirements
+        run: |
+          pip install -U pip wheel
+          pip install -U selenium
+
+      - name: Run thetastreak
+        env:
+          TG_USERNAME: ${{ secrets.TG_USERNAME }}
+          TG_PASSWORD: ${{ secrets.TG_PASSWORD }}
+        run: thetastreak/thetastreak.py
